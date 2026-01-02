@@ -29,8 +29,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     # Mini App Button
+    base_url = Config.PYTHONANYWHERE_DOMAIN or "https://your-domain.com"
+    # Clean the base_url: remove trailing slash and /tma if present
+    base_url = base_url.rstrip('/')
+    if base_url.endswith('/tma'):
+        base_url = base_url[:-4]
+    
     keyboard = [
-        [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=(Config.PYTHONANYWHERE_DOMAIN or "https://your-domain.com") + "/tma"))]
+        [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=f"{base_url}/tma"))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     

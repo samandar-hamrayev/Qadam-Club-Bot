@@ -50,8 +50,10 @@ def create_app():
     import os
 
     @app.route('/tma')
+    @app.route('/tma/tma') # Fallback for misconfigured domains
     def serve_tma():
-        frontend_dir = os.path.join(app.root_path, '../frontend/tma')
+        frontend_dir = os.path.abspath(os.path.join(app.root_path, '../frontend/tma'))
+        print(f"Serving TMA from: {frontend_dir}")
         return send_from_directory(frontend_dir, 'index.html')
 
     @app.route('/admin-panel')
