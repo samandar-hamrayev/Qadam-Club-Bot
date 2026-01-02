@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qadam Club TMA</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --tg-theme-bg-color: #fff;
+            --tg-theme-text-color: #000;
+            --tg-theme-hint-color: #999;
+            --tg-theme-link-color: #248b9f;
+            --tg-theme-button-color: #248b9f;
+            --tg-theme-button-text-color: #fff;
+            --accent-color: #6366f1;
+            --bg-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--bg-gradient);
+            padding: 24px;
+            color: white;
+            text-align: center;
+            border-radius: 0 0 24px 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            padding: 20px;
+            flex: 1;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid #eee;
+        }
+
+        .challenge-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .challenge-desc {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color);
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .streak-badge {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1 id="user-name">Welcome!</h1>
+        <p>Your Discipline Journey Starts Here</p>
+    </div>
+
+    <div class="container" id="challenge-list">
+        <p>Loading challenges...</p>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const user = tg.initDataUnsafe.user || { first_name: "User", id: 12345 };
+        document.getElementById('user-name').innerText = `Salom, ${user.first_name}!`;
+
+        // Automatically detect API URL from current origin
+        const API_URL = window.location.origin + "/api";
+
+        async function registerUser() {
+            await fetch(`${API_URL}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    telegram_id: user.id,
+                    full_name: user.first_name,
+                    username: user.username
+                })
+            });
+        }
+
+        async function loadChallenges() {
+            const res = await fetch(`${API_URL}/challenges/?telegram_id=${user.id}`);
+            const challenges = await res.json();
+            const list = document.getElementById('challenge-list');
+            list.innerHTML = '';
+
+            challenges.forEach(c => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const buttonHtml = c.is_joined
+                    ? `<button class="btn" onclick="submitResult(${c.id})">Natija Topshirish</button>`
+                    : `<button class="btn" style="background-color: #10b981;" onclick="joinChallenge(${c.id})">Qo'shilish</button>`;
+
+                card.innerHTML = `
+                    <div class="challenge-title">${c.title}</div>
+                    <div class="challenge-desc">${c.description}</div>
+                    ${buttonHtml}
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        async function joinChallenge(challengeId) {
+            const res = await fetch(`${API_URL}/challenges/${challengeId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegram_id: user.id })
+            });
+            if (res.ok) {
+                alert("Challenge'ga muvaffaqiyatli qo'shildingiz! Endi natija topshirishingiz mumkin.");
+                loadChallenges();
+            } else {
+                alert("Qo'shilishda xatolik.");
+            }
+        }
+
+        async function submitResult(challengeId) {
+            const value = prompt("Natijangizni kiriting:");
+            if (value === null) return;
+
+            const res = await fetch(`${API_URL}/challenges/${challengeId}/submit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    telegram_id: user.id,
+                    value: parseFloat(value)
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Muvaffaqiyatli! Streak: ${data.current_streak} kun`);
+            } else {
+                alert(`Xato: ${data.error}`);
+            }
+        }
+
+        registerUser().then(loadChallenges);
+    </script>
+</body>
+
+</html>

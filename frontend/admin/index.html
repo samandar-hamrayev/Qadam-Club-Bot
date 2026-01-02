@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qadam Club Admin</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .section {
+            border: 1px solid #ccc;
+            padding: 16px;
+            border-radius: 8px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #248b9f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #eee;
+            padding: 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Qadam Club Admin Panel</h1>
+
+    <div class="grid">
+        <div class="section">
+            <h2>Create Challenge</h2>
+            <input type="text" id="c-title" placeholder="Title">
+            <textarea id="c-desc" placeholder="Description"></textarea>
+            <input type="text" id="c-code" placeholder="Code (e.g. steps)">
+            <input type="text" id="c-unit" placeholder="Unit (e.g. pages)">
+            <input type="text" id="c-start" placeholder="Start Time (21:00)">
+            <input type="text" id="c-end" placeholder="End Time (23:59)">
+            <button onclick="createChallenge()">Create</button>
+        </div>
+
+        <div class="section">
+            <h2>Challenges</h2>
+            <div id="challenges-list">Loading...</div>
+        </div>
+    </div>
+
+    <div class="section" style="margin-top: 20px;">
+        <h2>Users</h2>
+        <div id="users-list">Loading...</div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin + "/api";
+        let ADMIN_ID = localStorage.getItem('admin_id');
+
+        if (!ADMIN_ID) {
+            ADMIN_ID = prompt("Admin Telegram ID'ingizni kiriting:");
+            if (ADMIN_ID) localStorage.setItem('admin_id', ADMIN_ID);
+        }
+
+        async function createChallenge() {
+            const data = {
+                admin_id: ADMIN_ID,
+                title: document.getElementById('c-title').value,
+                description: document.getElementById('c-desc').value,
+                code: document.getElementById('c-code').value,
+                target_unit: document.getElementById('c-unit').value,
+                time_window_start: document.getElementById('c-start').value,
+                time_window_end: document.getElementById('c-end').value
+            };
+            const res = await fetch(`${API_URL}/admin/challenges`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (res.ok) alert("Created!");
+            loadData();
+        }
+
+        async function loadData() {
+            // Load challenges
+            const cRes = await fetch(`${API_URL}/challenges/`);
+            const challenges = await cRes.json();
+            document.getElementById('challenges-list').innerHTML = `
+                <table>
+                    <tr><th>Title</th><th>Code</th><th>Unit</th></tr>
+                    ${challenges.map(c => `<tr><td>${c.title}</td><td>${c.code}</td><td>${c.target_unit}</td></tr>`).join('')}
+                </table>
+            `;
+
+            // Load users
+            const uRes = await fetch(`${API_URL}/admin/users?admin_id=${ADMIN_ID}`);
+            const users = await uRes.json();
+            document.getElementById('users-list').innerHTML = `
+                <table>
+                    <tr><th>Name</th><th>Username</th><th>Status</th></tr>
+                    ${users.map(u => `<tr><td>${u.full_name}</td><td>${u.username}</td><td>${u.is_banned ? 'Banned' : 'Active'}</td></tr>`).join('')}
+                </table>
+            `;
+        }
+
+        loadData();
+    </script>
+</body>
+
+</html>
