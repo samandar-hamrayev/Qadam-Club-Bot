@@ -1,56 +1,67 @@
 # Qadam Club Bot 🤖
 
-Professional Telegram Bot and Mini App system for habit tracking and challenges.
+Professional darajadagi Telegram Bot va Mini App (TMA) ekotizimi. Ushbu platforma foydalanuvchilarning kundalik odatlarini (habit tracking) shakllantirish, streaklarni hisoblash va sog'lom raqobat muhitini yaratishga mo'ljallangan.
 
-## Project Structure
+## 🚀 Imkoniyatlar
 
-- `backend/`: Flask 3.0 API with SQLAlchemy 2.x models and routes.
-- `bot/`: Telegram Bot implementation using `python-telegram-bot` v21.
-- `frontend/`: Boilerplates for Telegram Mini App and Admin Panel.
-- `config.py`: Global configuration using environment variables.
+- **Telegram Mini App (TMA):** Chiroyli va qulay interfeys orqali natijalarni topshirish.
+- **Admin Panel:** Challenge'larni boshqarish, foydalanuvchilar statistikasini ko'rish.
+- **Streak Tizimi:** Kunlik uzluksiz natijalar uchun "streak"lar (Duolingo uslubida).
+- **Vaqtli Cheklovlar:** Muayyan vaqt oraliqlarida (masalan, 21:00-23:59) natija qabul qilish.
+- **Avtomatlashtirish:** Kunlik eslatmalar va haftalik g'oliblarni aniqlash (APScheduler).
+- **Docker Support:** Tezkor va xatosiz ishga tushirish.
 
-## Ishga tushirish (Run)
+## 📁 Loyiha Strukturasi
 
-### 0. Tayyorgarlik (.env sozlash)
-Avval `.env.example` faylidan nusxa olib, `.env` faylini yarating:
+- `backend/`: Flask 3.0 API, SQLAlchemy 2.x modellari va route'lar.
+- `bot/`: `python-telegram-bot` v21 orqali yozilgan bot logikasi.
+- `frontend/`: TMA va Admin Panel uchun HTML/CSS/JS boilerplatelar.
+- `config.py`: Global sozlamalar va o'zgaruvchilar.
+
+## 🛠 O'rnatish va Ishga tushirish
+
+### 1. Loyihani yuklab olish
+```bash
+git clone https://github.com/samandar-hamrayev/Qadam-Club-Bot.git
+cd Qadam-Club-Bot
+```
+
+### 2. Muhitni sozlash (.env)
+`.env.example` faylidan nusxa oling va o'zingizning ma'lumotlaringizni kiriting:
 ```bash
 cp .env.example .env
 ```
-Keyin `.env` faylini ochib, ichiga o'zingizning ma'lumotlaringizni (BOT_TOKEN, ADMIN_IDS va h.k.) yozing.
+`.env` fayli ichidagi muhim o'zgaruvchilar:
+- `BOT_TOKEN`: @BotFather dan olingan token.
+- `ADMIN_IDS`: Sizning Telegram ID'ingiz (admin bo'lish uchun).
+- `API_URL`: Docker uchun `http://backend:5000/api`, oddiy ishga tushirish uchun `http://localhost:5000/api`.
+- `PYTHONANYWHERE_DOMAIN`: Ngrok yoki production domeningiz (oxiriga `/tma` qo'shiladi).
 
-### 1-variant: Docker orqali (Tavsiya qilinadi)
-Agar kompyuteringizda Docker o'rnatilgan bo'lsa, loyihani birgina buyruq bilan ishga tushirishingiz mumkin:
+### 3. Ishga tushirish (Variantlar)
 
+#### A-variant: Docker orqali (Tavsiya qilinadi)
+Kompyuteringizda Docker bo'lsa, bitta buyruq bilan hamma narsani ishga tushiring:
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
-Bu buyruq Backend va Bot'ni bir vaqtda ishga tushiradi.
+*Eslatma: macOS'da 5000-port band bo'lishi mumkinligi sababli, loyiha **5001** portda ishlaydi.*
 
-### 2-variant: Oddiy buyruqlar orqali
+#### B-variant: Oddiy buyruqlar orqali
+1. Kutubxonalarni o'rnatish: `pip install -r requirements.txt`
+2. Backendni boshlash: `python -m backend.app`
+3. Botni boshlash (yangi terminalda): `python -m bot.bot`
 
-1. **Kutubxonalarni o'rnatish:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 🌐 Lokal Test qilish (ngrok)
 
-2. **Backend'ni ishga tushirish:**
-   ```bash
-   python -m backend.app
-   ```
+TMA haqiqiy Telegram ichida ishlashi uchun lokal loyihangizni tashqi dunyoga ochishingiz kerak:
+1. Terminalda: `ngrok http 5001`
+2. Berilgan `https://...` manzilini `.env` faylidagi `PYTHONANYWHERE_DOMAIN` ga yozing.
+3. Mini App URL: `https://sizning-manzil.ngrok-free.app/tma`
+4. Admin Panel URL: `https://sizning-manzil.ngrok-free.app/admin-panel`
 
-3. **Bot'ni ishga tushirish:**
-   ```bash
-   python -m bot.bot
-   ```
+## 📋 Bot Komandalari
+- `/start`: Botni boshlash va Mini App orqali ro'yxatdan o'tish.
+- `/submit`: Natijalarni qo'lda (Mini App'siz) topshirish.
 
-## Muhim
-Ishga tushirishdan oldin `.env` faylini yarating va kerakli o'zgaruvchilarni (`BOT_TOKEN` va boshqalar) kiriting.
-
-## Development
-
-- **Database**: `backend/models.py`
-- **Bot Handlers**: `bot/handlers.py`
-- **UI**: `frontend/tma/index.html`
-
-## License
+## ⚖️ License
 MIT
