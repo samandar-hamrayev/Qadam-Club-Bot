@@ -30,7 +30,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Mini App Button
     keyboard = [
-        [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=Config.PYTHONANYWHERE_DOMAIN or "https://your-domain.com"))]
+        [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=(Config.PYTHONANYWHERE_DOMAIN or "https://your-domain.com") + "/tma"))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     

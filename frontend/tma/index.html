@@ -103,84 +103,131 @@
         <p>Loading challenges...</p>
     </div>
 
+    <!-- Submission Modal -->
+    <div id="modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="card" style="width:80%; margin:0;">
+            <h3 id="modal-title">Natija</h3>
+            <input type="number" id="submission-value"
+                style="width:100%; padding:12px; border-radius:12px; border:1px solid #ccc; margin-bottom:16px; box-sizing:border-box;"
+                placeholder="Masalan: 5000">
+            <button class="btn" id="modal-submit">Topshirish</button>
+            <button class="btn" style="background:#ef4444; margin-top:8px;" onclick="closeModal()">Yopish</button>
+        </div>
+    </div>
+
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const user = tg.initDataUnsafe.user || { first_name: "User", id: 12345 };
+        const user = tg.initDataUnsafe.user || { first_name: "Test User", id: 2118766316 };
         document.getElementById('user-name').innerText = `Salom, ${user.first_name}!`;
 
-        // Automatically detect API URL from current origin
         const API_URL = window.location.origin + "/api";
+        let activeChallengeId = null;
+
+        function showModal(challengeId, title) {
+            activeChallengeId = challengeId;
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('submission-value').value = '';
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
 
         async function registerUser() {
-            await fetch(`${API_URL}/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    telegram_id: user.id,
-                    full_name: user.first_name,
-                    username: user.username
-                })
-            });
+            try {
+                await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegram_id: user.id,
+                        full_name: user.first_name,
+                        username: user.username
+                    })
+                });
+            } catch (e) {
+                console.error("Register Error:", e);
+            }
         }
 
         async function loadChallenges() {
-            const res = await fetch(`${API_URL}/challenges/?telegram_id=${user.id}`);
-            const challenges = await res.json();
-            const list = document.getElementById('challenge-list');
-            list.innerHTML = '';
+            try {
+                const res = await fetch(`${API_URL}/challenges/?telegram_id=${user.id}`);
+                const challenges = await res.json();
+                const list = document.getElementById('challenge-list');
+                list.innerHTML = '';
 
-            challenges.forEach(c => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                const buttonHtml = c.is_joined
-                    ? `<button class="btn" onclick="submitResult(${c.id})">Natija Topshirish</button>`
-                    : `<button class="btn" style="background-color: #10b981;" onclick="joinChallenge(${c.id})">Qo'shilish</button>`;
+                if (challenges.length === 0) {
+                    list.innerHTML = '<p style="text-align:center;">Hozircha faol challenge\'lar yo\'q.</p>';
+                    return;
+                }
 
-                card.innerHTML = `
-                    <div class="challenge-title">${c.title}</div>
-                    <div class="challenge-desc">${c.description}</div>
-                    ${buttonHtml}
-                `;
-                list.appendChild(card);
-            });
+                challenges.forEach(c => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    const buttonHtml = c.is_joined
+                        ? `<button class="btn" onclick="showModal(${c.id}, '${c.title}')">Natija Topshirish</button>`
+                        : `<button class="btn" style="background-color: #10b981;" onclick="joinChallenge(${c.id})">Qo'shilish</button>`;
+
+                    card.innerHTML = `
+                        <div class="challenge-title">${c.title}</div>
+                        <div class="challenge-desc">${c.description}</div>
+                        ${buttonHtml}
+                    `;
+                    list.appendChild(card);
+                });
+            } catch (e) {
+                document.getElementById('challenge-list').innerHTML = `<p style="color:red;">Xatolik: ${e.message}</p>`;
+            }
         }
 
         async function joinChallenge(challengeId) {
-            const res = await fetch(`${API_URL}/challenges/${challengeId}/join`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telegram_id: user.id })
-            });
-            if (res.ok) {
-                alert("Challenge'ga muvaffaqiyatli qo'shildingiz! Endi natija topshirishingiz mumkin.");
-                loadChallenges();
-            } else {
-                alert("Qo'shilishda xatolik.");
+            try {
+                const res = await fetch(`${API_URL}/challenges/${challengeId}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: user.id })
+                });
+                if (res.ok) {
+                    tg.showAlert("Challenge'ga muvaffaqiyatli qo'shildingiz!");
+                    loadChallenges();
+                } else {
+                    const data = await res.json();
+                    tg.showAlert(`Xato: ${data.error || 'Qo\'shilib bo\'lmadi'}`);
+                }
+            } catch (e) {
+                tg.showAlert(`Network xatosi: ${e.message}`);
             }
         }
 
-        async function submitResult(challengeId) {
-            const value = prompt("Natijangizni kiriting:");
-            if (value === null) return;
+        document.getElementById('modal-submit').onclick = async () => {
+            const value = document.getElementById('submission-value').value;
+            if (!value) return;
 
-            const res = await fetch(`${API_URL}/challenges/${challengeId}/submit`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    telegram_id: user.id,
-                    value: parseFloat(value)
-                })
-            });
+            try {
+                const res = await fetch(`${API_URL}/challenges/${activeChallengeId}/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegram_id: user.id,
+                        value: parseFloat(value)
+                    })
+                });
 
-            const data = await res.json();
-            if (res.ok) {
-                alert(`Muvaffaqiyatli! Streak: ${data.current_streak} kun`);
-            } else {
-                alert(`Xato: ${data.error}`);
+                const data = await res.json();
+                if (res.ok) {
+                    tg.showAlert(`Muvaffaqiyatli! Streak: ${data.current_streak} kun`);
+                    closeModal();
+                } else {
+                    tg.showAlert(`Xato: ${data.error}`);
+                }
+            } catch (e) {
+                tg.showAlert(`Xatolik: ${e.message}`);
             }
-        }
+        };
 
         registerUser().then(loadChallenges);
     </script>

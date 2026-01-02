@@ -20,7 +20,7 @@ def run_bot():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("submit", submit))
     application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT, handle_message))
     
     # Scheduler
     from .scheduler import setup_scheduler
