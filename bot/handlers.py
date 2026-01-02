@@ -57,11 +57,16 @@ async def submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    text = update.message.text.strip()
     user_id = update.effective_user.id
     
+    # 1. Check if it's a command like /code or /code 1500
     if text.startswith('/'):
-        code = text[1:].split()[0]
+        parts = text[1:].split()
+        if not parts:
+            return
+        
+        code = parts[0]
         # Check if it's a challenge code
         try:
             response = requests.get(f"{API_BASE_URL}/challenges/")
@@ -69,33 +74,73 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             challenge = next((c for c in challenges if c['code'] == code), None)
             
             if challenge:
-                context.user_data['active_submission'] = challenge['id']
+                challenge_id = challenge['id']
+                # If value is provided in the same message: /code 1500
+                if len(parts) > 1:
+                    try:
+                        value = float(parts[1])
+                        await _process_submission(update, context, user_id, challenge_id, value)
+                        return
+                    except ValueError:
+                        pass # Continue to 'kiriting' logic if not a number
+                
+                # Otherwise, set state and ask for value
+                context.user_data['active_submission'] = challenge_id
                 await update.message.reply_text(f"{challenge['title']} uchun natijani kiriting (masalan: 10):")
                 return
-        except:
-            pass
-
-    # If we are waiting for a value
-    if 'active_submission' in context.user_data:
-        challenge_id = context.user_data.pop('active_submission')
-        try:
-            value = float(text)
-            response = requests.post(f"{API_BASE_URL}/challenges/{challenge_id}/submit", json={
-                "telegram_id": user_id,
-                "value": value
-            })
-            res_data = response.json()
-            
-            if response.status_code == 200:
-                await update.message.reply_text(
-                    f"Muvaffaqiyatli qabul qilindi! ✅\n"
-                    f"Streak: {res_data['current_streak']} kun\n"
-                    f"Jami: {res_data['total_value']}"
-                )
-            else:
-                error_msg = res_data.get('error', "Noma'lum xato")
-                await update.message.reply_text(f"Xato: {error_msg}")
-        except ValueError:
-            await update.message.reply_text("Iltimos, faqat son kiriting.")
         except Exception as e:
+            print(f"Challenge check error: {e}")
+
+    # 2. If we are waiting for a value (normal text or invalid command that might be a value)
+    if 'active_submission' in context.user_data:
+        challenge_id = context.user_data['active_submission']
+        try:
+            # Try to get value from the whole text (if it's just a number)
+            # or from the second part if they accidentally sent /code value again
+            clean_text = text
+            if text.startswith('/'):
+                parts = text.split()
+                if len(parts) > 1:
+                    clean_text = parts[1]
+                else:
+                    # It's just a /command, maybe a different one? 
+                    # If it's a known challenge we already handled it above.
+                    # If it's unknown, we should probably ignore it or tell them to enter a number.
+                    return
+
+            value = float(clean_text)
+            context.user_data.pop('active_submission')
+            await _process_submission(update, context, user_id, challenge_id, value)
+        except ValueError:
+            await update.message.reply_text("Iltimos, faqat son kiriting (yoki /cancel deb yozing).")
+        except Exception as e:
+            print(f"Submission Error: {e}")
             await update.message.reply_text("Topshirishda xatolik yuz berdi.")
+
+async def _process_submission(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id, challenge_id, value):
+    try:
+        response = requests.post(f"{API_BASE_URL}/challenges/{challenge_id}/submit", json={
+            "telegram_id": user_id,
+            "value": value
+        })
+        res_data = response.json()
+        
+        if response.status_code == 200:
+            await update.message.reply_text(
+                f"Muvaffaqiyatli qabul qilindi! ✅\n"
+                f"Streak: {res_data['current_streak']} kun\n"
+                f"Jami: {res_data['total_value']}"
+            )
+        else:
+            error_msg = res_data.get('error', "Noma'lum xato")
+            await update.message.reply_text(f"Xato: {error_msg}")
+    except Exception as e:
+        print(f"Processing Error: {e}")
+        await update.message.reply_text("Topshirishda xatolik yuz berdi.")
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if 'active_submission' in context.user_data:
+        context.user_data.pop('active_submission')
+        await update.message.reply_text("Bekor qilindi. ❌")
+    else:
+        await update.message.reply_text("Hozircha bekor qiladigan narsa yo'q.")

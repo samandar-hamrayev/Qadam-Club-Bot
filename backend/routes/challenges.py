@@ -189,6 +189,7 @@ def submit_result(challenge_id):
             current_time = now.time()
             
             if not (start_time <= current_time <= end_time):
+                print(f"Submission rejected: Time window error for user {telegram_id} ({current_time} not in {challenge.time_window_start}-{challenge.time_window_end})")
                 return jsonify({"error": f"Submission only allowed between {challenge.time_window_start} and {challenge.time_window_end}"}), 400
 
         # Check if already submitted today
@@ -198,20 +199,27 @@ def submit_result(challenge_id):
         ).first()
         
         if existing_sub:
+            print(f"Submission rejected: User {telegram_id} already submitted today")
             return jsonify({"error": "Already submitted today"}), 400
             
-        # Create submission
-        submission = Submission(user_id=user.id, challenge_id=challenge_id, value=value, date=today)
-        db.add(submission)
-        
         # Update streak and total
         uc = db.query(UserChallenge).filter(
             and_(UserChallenge.user_id == user.id, UserChallenge.challenge_id == challenge_id)
         ).first()
         
         if not uc:
-            return jsonify({"error": "You must join the challenge first"}), 400
+            print(f"Submission auto-joining: User {telegram_id} for challenge {challenge_id}")
+            uc = UserChallenge(user_id=user.id, challenge_id=challenge_id, is_joined=True)
+            db.add(uc)
+            db.flush()
+        elif not uc.is_joined:
+            print(f"Submission re-joining: User {telegram_id} for challenge {challenge_id}")
+            uc.is_joined = True
             
+        # Create submission
+        submission = Submission(user_id=user.id, challenge_id=challenge_id, value=value, date=today)
+        db.add(submission)
+        
         # Streak logic
         yesterday = today - timedelta(days=1)
         last_sub = db.query(Submission).filter(
@@ -229,6 +237,7 @@ def submit_result(challenge_id):
         uc.total_value += value
         
         db.commit()
+        print(f"Submission success: User {telegram_id}, Streak {uc.current_streak}")
         return jsonify({
             "status": "success", 
             "current_streak": uc.current_streak,

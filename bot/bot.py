@@ -1,7 +1,7 @@
 import logging
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from config import Config
-from .handlers import start, submit, handle_message
+from .handlers import start, submit, handle_message, cancel
 
 # Enable logging
 logging.basicConfig(
@@ -19,6 +19,7 @@ def run_bot():
     # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("submit", submit))
+    application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Scheduler
