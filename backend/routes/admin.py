@@ -15,6 +15,38 @@ def check_admin(telegram_id):
 
 @admin_bp.route('/challenges', methods=['POST'])
 def create_challenge():
+    """
+    Yangi challenge yaratish
+    ---
+    tags:
+      - Admin
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            admin_id:
+              type: integer
+            title:
+              type: string
+            description:
+              type: string
+            code:
+              type: string
+            target_unit:
+              type: string
+            time_window_start:
+              type: string
+            time_window_end:
+              type: string
+    responses:
+      200:
+        description: Challenge yaratildi
+      403:
+        description: Ruxsat yo'q
+    """
     data = request.json
     admin_id = data.get('admin_id')
     if not check_admin(admin_id):
@@ -41,6 +73,34 @@ def create_challenge():
 
 @admin_bp.route('/challenges/<int:id>', methods=['PATCH'])
 def update_challenge(id):
+    """
+    Challenge ma'lumotlarini yangilash
+    ---
+    tags:
+      - Admin
+    parameters:
+      - name: id
+        in: path
+        type: integer
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            admin_id:
+              type: integer
+            title:
+              type: string
+            description:
+              type: string
+    responses:
+      200:
+        description: Yangilandi
+      403:
+        description: Ruxsat yo'q
+    """
     data = request.json
     admin_id = data.get('admin_id')
     if not check_admin(admin_id):
@@ -63,6 +123,22 @@ def update_challenge(id):
 
 @admin_bp.route('/users', methods=['GET'])
 def list_users():
+    """
+    Barcha foydalanuvchilar ro'yxatini olish
+    ---
+    tags:
+      - Admin
+    parameters:
+      - name: admin_id
+        in: query
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Foydalanuvchilar ro'yxati
+      403:
+        description: Ruxsat yo'q
+    """
     admin_id = request.args.get('admin_id', type=int)
     if not check_admin(admin_id):
         return jsonify({"error": "Unauthorized"}), 403
@@ -83,6 +159,30 @@ def list_users():
 
 @admin_bp.route('/users/<int:id>/ban', methods=['POST'])
 def ban_user(id):
+    """
+    Foydalanuvchini bloklash
+    ---
+    tags:
+      - Admin
+    parameters:
+      - name: id
+        in: path
+        type: integer
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            admin_id:
+              type: integer
+    responses:
+      200:
+        description: Foydalanuvchi bloklandi
+      403:
+        description: Ruxsat yo'q
+    """
     data = request.json
     admin_id = data.get('admin_id')
     if not check_admin(admin_id):

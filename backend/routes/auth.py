@@ -7,6 +7,59 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
+    """
+    Foydalanuvchini ro'yxatdan o'tkazish yoki ma'lumotlarini yangilash
+    ---
+    tags:
+      - Auth
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - telegram_id
+          properties:
+            telegram_id:
+              type: integer
+              description: Foydalanuvchining Telegram ID raqami
+            full_name:
+              type: string
+              description: Foydalanuvchining to'liq ismi
+            username:
+              type: string
+              description: Foydalanuvchining Telegram username'i
+    responses:
+      200:
+        description: Muvaffaqiyatli ro'yxatdan o'tildi
+        schema:
+          properties:
+            status:
+              type: string
+              example: success
+            user:
+              type: object
+              properties:
+                id:
+                  type: integer
+                telegram_id:
+                  type: integer
+                full_name:
+                  type: string
+                username:
+                  type: string
+                is_active:
+                  type: boolean
+                is_banned:
+                  type: boolean
+                is_admin:
+                  type: boolean
+      400:
+        description: Ma'lumotlar to'liq emas
+      500:
+        description: Server xatosi
+    """
     data = request.json
     if not data or 'telegram_id' not in data:
         return jsonify({"error": "Missing telegram_id"}), 400

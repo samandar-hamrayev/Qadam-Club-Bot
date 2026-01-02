@@ -9,6 +9,41 @@ challenges_bp = Blueprint('challenges', __name__)
 
 @challenges_bp.route('/', methods=['GET'])
 def get_challenges():
+    """
+    Barcha faol challenge'larni olish
+    ---
+    tags:
+      - Challenges
+    parameters:
+      - name: telegram_id
+        in: query
+        type: integer
+        required: false
+        description: Foydalanuvchining join statusini tekshirish uchun ID
+    responses:
+      200:
+        description: Challenge'lar ro'yxati
+        schema:
+          type: array
+          items:
+            properties:
+              id:
+                type: integer
+              title:
+                type: string
+              description:
+                type: string
+              code:
+                type: string
+              target_unit:
+                type: string
+              time_window_start:
+                type: string
+              time_window_end:
+                type: string
+              is_joined:
+                type: boolean
+    """
     telegram_id = request.args.get('telegram_id', type=int)
     db = SessionLocal()
     try:
@@ -43,6 +78,30 @@ def get_challenges():
 
 @challenges_bp.route('/<int:challenge_id>/join', methods=['POST'])
 def join_challenge(challenge_id):
+    """
+    Challenge'ga qo'shilish
+    ---
+    tags:
+      - Challenges
+    parameters:
+      - name: challenge_id
+        in: path
+        type: integer
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            telegram_id:
+              type: integer
+    responses:
+      200:
+        description: Muvaffaqiyatli qo'shildingiz
+      404:
+        description: Foydalanuvchi yoki challenge topilmadi
+    """
     data = request.json
     telegram_id = data.get('telegram_id')
     
@@ -69,6 +128,43 @@ def join_challenge(challenge_id):
 
 @challenges_bp.route('/<int:challenge_id>/submit', methods=['POST'])
 def submit_result(challenge_id):
+    """
+    Challenge natijasini topshirish
+    ---
+    tags:
+      - Challenges
+    parameters:
+      - name: challenge_id
+        in: path
+        type: integer
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            telegram_id:
+              type: integer
+            value:
+              type: number
+              description: Topshirilayotgan qiymat (masalan, qadamlar soni)
+    responses:
+      200:
+        description: Natija qabul qilindi
+        schema:
+          properties:
+            status:
+              type: string
+            current_streak:
+              type: integer
+            total_value:
+              type: number
+      400:
+        description: Vaqt cheklovi yoki allaqachon topshirilgan
+      404:
+        description: Topilmadi
+    """
     data = request.json
     telegram_id = data.get('telegram_id')
     value = float(data.get('value', 0))

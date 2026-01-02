@@ -8,6 +8,35 @@ leaderboard_bp = Blueprint('leaderboard', __name__)
 
 @leaderboard_bp.route('/', methods=['GET'])
 def get_leaderboard():
+    """
+    Challenge peshqadamlar jadvalini olish
+    ---
+    tags:
+      - Leaderboard
+    parameters:
+      - name: challenge_id
+        in: query
+        type: integer
+        required: true
+      - name: period
+        in: query
+        type: string
+        enum: [today, weekly, monthly, all]
+        default: today
+    responses:
+      200:
+        description: Peshaqadamlar ro'yxati
+        schema:
+          type: array
+          items:
+            properties:
+              full_name:
+                type: string
+              username:
+                type: string
+              total_value:
+                type: number
+    """
     challenge_id = request.args.get('challenge_id', type=int)
     period = request.args.get('period', 'today') # today, weekly, monthly, all
     
@@ -45,6 +74,32 @@ def get_leaderboard():
 
 @leaderboard_bp.route('/streaks', methods=['GET'])
 def get_streak_leaderboard():
+    """
+    Streak bo'yicha peshqadamlar jadvali
+    ---
+    tags:
+      - Leaderboard
+    parameters:
+      - name: challenge_id
+        in: query
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Streak peshqadamlari ro'yxati
+        schema:
+          type: array
+          items:
+            properties:
+              full_name:
+                type: string
+              username:
+                type: string
+              current_streak:
+                type: integer
+              max_streak:
+                type: integer
+    """
     challenge_id = request.args.get('challenge_id', type=int)
     if not challenge_id:
         return jsonify({"error": "Missing challenge_id"}), 400
