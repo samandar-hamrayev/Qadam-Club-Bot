@@ -1,67 +1,92 @@
-# Qadam Club Bot 🤖
+# Qadam Club Bot
 
-Professional darajadagi Telegram Bot va Mini App (TMA) ekotizimi. Ushbu platforma foydalanuvchilarning kundalik odatlarini (habit tracking) shakllantirish, streaklarni hisoblash va sog'lom raqobat muhitini yaratishga mo'ljallangan.
+A Telegram bot and Mini App (TMA) ecosystem for daily habit tracking. Users submit results through a Telegram Mini App, track streaks, and compete on a leaderboard.
 
-## 🚀 Imkoniyatlar
+## Features
 
-- **Telegram Mini App (TMA):** Chiroyli va qulay interfeys orqali natijalarni topshirish.
-- **Admin Panel:** Challenge'larni boshqarish, foydalanuvchilar statistikasini ko'rish.
-- **Streak Tizimi:** Kunlik uzluksiz natijalar uchun "streak"lar (Duolingo uslubida).
-- **Vaqtli Cheklovlar:** Muayyan vaqt oraliqlarida (masalan, 21:00-23:59) natija qabul qilish.
-- **Avtomatlashtirish:** Kunlik eslatmalar va haftalik g'oliblarni aniqlash (APScheduler).
-- **Docker Support:** Tezkor va xatosiz ishga tushirish.
+- **Telegram Mini App (TMA)** — clean UI for submitting daily results
+- **Streak system** — Duolingo-style consecutive day tracking
+- **Time-gated submissions** — accepts results only within a configured window (e.g., 21:00–23:59)
+- **Admin panel** — manage challenges and view user statistics
+- **Automation** — daily reminders and weekly winner detection via APScheduler
+- **Docker support** — single-command deployment
 
-## 📁 Loyiha Strukturasi
+## Tech Stack
 
-- `backend/`: Flask 3.0 API, SQLAlchemy 2.x modellari va route'lar.
-- `bot/`: `python-telegram-bot` v21 orqali yozilgan bot logikasi.
-- `frontend/`: TMA va Admin Panel uchun HTML/CSS/JS boilerplatelar.
-- `config.py`: Global sozlamalar va o'zgaruvchilar.
+- **Backend**: Flask 3.0, SQLAlchemy 2.x
+- **Bot**: python-telegram-bot v21
+- **Frontend**: HTML/CSS/JS (Telegram Mini App + Admin Panel)
+- **Scheduler**: APScheduler
+- **Container**: Docker + docker-compose
 
-## 🛠 O'rnatish va Ishga tushirish
+## Setup
 
-### 1. Loyihani yuklab olish
+### 1. Clone
+
 ```bash
 git clone https://github.com/samandar-hamrayev/Qadam-Club-Bot.git
 cd Qadam-Club-Bot
 ```
 
-### 2. Muhitni sozlash (.env)
-`.env.example` faylidan nusxa oling va o'zingizning ma'lumotlaringizni kiriting:
+### 2. Configure environment
+
 ```bash
 cp .env.example .env
 ```
-`.env` fayli ichidagi muhim o'zgaruvchilar:
-- `BOT_TOKEN`: @BotFather dan olingan token.
-- `ADMIN_IDS`: Sizning Telegram ID'ingiz (admin bo'lish uchun).
-- `API_URL`: Docker uchun `http://backend:5000/api`, oddiy ishga tushirish uchun `http://localhost:5000/api`.
-- `PYTHONANYWHERE_DOMAIN`: Ngrok yoki production domeningiz (oxiriga `/tma` qo'shiladi).
 
-### 3. Ishga tushirish (Variantlar)
+Key variables:
 
-#### A-variant: Docker orqali (Tavsiya qilinadi)
-Kompyuteringizda Docker bo'lsa, bitta buyruq bilan hamma narsani ishga tushiring:
+| Variable | Description |
+|----------|-------------|
+| `BOT_TOKEN` | Bot token from @BotFather |
+| `ADMIN_IDS` | Your Telegram ID (grants admin access) |
+| `API_URL` | `http://backend:5000/api` (Docker) or `http://localhost:5000/api` (local) |
+| `PYTHONANYWHERE_DOMAIN` | Your ngrok or production domain |
+
+### 3. Run
+
+**Docker (recommended):**
+
 ```bash
 docker compose up --build
 ```
-*Eslatma: macOS'da 5000-port band bo'lishi mumkinligi sababli, loyiha **5001** portda ishlaydi.*
 
-#### B-variant: Oddiy buyruqlar orqali
-1. Kutubxonalarni o'rnatish: `pip install -r requirements.txt`
-2. Backendni boshlash: `python -m backend.app`
-3. Botni boshlash (yangi terminalda): `python -m bot.bot`
+> On macOS, port 5000 may be occupied by AirPlay — the app runs on port **5001** instead.
 
-## 🌐 Lokal Test qilish (ngrok)
+**Local:**
 
-TMA haqiqiy Telegram ichida ishlashi uchun lokal loyihangizni tashqi dunyoga ochishingiz kerak:
-1. Terminalda: `ngrok http 5001`
-2. Berilgan `https://...` manzilini `.env` faylidagi `PYTHONANYWHERE_DOMAIN` ga yozing.
-3. Mini App URL: `https://sizning-manzil.ngrok-free.app/tma`
-4. Admin Panel URL: `https://sizning-manzil.ngrok-free.app/admin-panel`
+```bash
+pip install -r requirements.txt
+python -m backend.app      # start Flask backend
+python -m bot.bot          # start bot (new terminal)
+```
 
-## 📋 Bot Komandalari
-- `/start`: Botni boshlash va Mini App orqali ro'yxatdan o'tish.
-- `/submit`: Natijalarni qo'lda (Mini App'siz) topshirish.
+## Local Testing with ngrok
 
-## ⚖️ License
+The Telegram Mini App requires an HTTPS URL. Expose your local server:
+
+1. Run `ngrok http 5001`
+2. Copy the `https://...` URL into `PYTHONANYWHERE_DOMAIN` in `.env`
+3. Mini App: `https://your-domain.ngrok-free.app/tma`
+4. Admin panel: `https://your-domain.ngrok-free.app/admin-panel`
+
+## Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Register and open the Mini App |
+| `/submit` | Submit results manually without TMA |
+
+## Project Structure
+
+```
+Qadam-Club-Bot/
+├── backend/     # Flask API + SQLAlchemy models
+├── bot/         # Telegram bot handlers
+├── frontend/    # TMA and Admin Panel (HTML/CSS/JS)
+└── config.py    # Global configuration
+```
+
+## License
+
 MIT
