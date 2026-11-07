@@ -118,13 +118,39 @@
 
     <script>
         const tg = window.Telegram.WebApp;
+        tg.ready();
         tg.expand();
-
-        const user = tg.initDataUnsafe.user || { first_name: "Test User", id: 2118766316 };
-        document.getElementById('user-name').innerText = `Salom, ${user.first_name}!`;
 
         const API_URL = window.location.origin + "/api";
         let activeChallengeId = null;
+
+        // initData is signed by Telegram; the backend validates it on every request
+        // and derives the user from it. Nothing user-related is trusted from the client.
+        const initData = tg.initData;
+        const user = tg.initDataUnsafe.user;
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[ch]);
+        }
+
+        async function api(path, options = {}) {
+            const res = await fetch(`${API_URL}${path}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `tma ${initData}`,
+                    ...(options.headers || {})
+                }
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) { /* empty body */ }
+            if (!res.ok) {
+                throw new Error((data && data.error) || `HTTP ${res.status}`);
+            }
+            return data;
+        }
 
         function showModal(challengeId, title) {
             activeChallengeId = challengeId;
@@ -137,27 +163,10 @@
             document.getElementById('modal').style.display = 'none';
         }
 
-        async function registerUser() {
-            try {
-                await fetch(`${API_URL}/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        telegram_id: user.id,
-                        full_name: user.first_name,
-                        username: user.username
-                    })
-                });
-            } catch (e) {
-                console.error("Register Error:", e);
-            }
-        }
-
         async function loadChallenges() {
+            const list = document.getElementById('challenge-list');
             try {
-                const res = await fetch(`${API_URL}/challenges/?telegram_id=${user.id}`);
-                const challenges = await res.json();
-                const list = document.getElementById('challenge-list');
+                const challenges = await api('/challenges/');
                 list.innerHTML = '';
 
                 if (challenges.length === 0) {
@@ -168,68 +177,75 @@
                 challenges.forEach(c => {
                     const card = document.createElement('div');
                     card.className = 'card';
-                    const buttonHtml = c.is_joined
-                        ? `<button class="btn" onclick="showModal(${c.id}, '${c.title}')">Natija Topshirish</button>`
-                        : `<button class="btn" style="background-color: #10b981;" onclick="joinChallenge(${c.id})">Qo'shilish</button>`;
-
+                    const windowText = c.time_window_start && c.time_window_end
+                        ? `<div class="streak-badge">⏰ ${escapeHtml(c.time_window_start)}–${escapeHtml(c.time_window_end)}</div>`
+                        : '';
                     card.innerHTML = `
-                        <div class="challenge-title">${c.title}</div>
-                        <div class="challenge-desc">${c.description}</div>
-                        ${buttonHtml}
+                        <div class="challenge-title">${escapeHtml(c.title)}</div>
+                        <div class="challenge-desc">${escapeHtml(c.description)}</div>
+                        ${windowText}
                     `;
+                    const button = document.createElement('button');
+                    button.className = 'btn';
+                    button.style.marginTop = '12px';
+                    if (c.is_joined) {
+                        button.textContent = 'Natija Topshirish';
+                        button.addEventListener('click', () => showModal(c.id, c.title));
+                    } else {
+                        button.textContent = "Qo'shilish";
+                        button.style.backgroundColor = '#10b981';
+                        button.addEventListener('click', () => joinChallenge(c.id));
+                    }
+                    card.appendChild(button);
                     list.appendChild(card);
                 });
             } catch (e) {
-                document.getElementById('challenge-list').innerHTML = `<p style="color:red;">Xatolik: ${e.message}</p>`;
+                list.innerHTML = '';
+                const p = document.createElement('p');
+                p.style.color = 'red';
+                p.textContent = `Xatolik: ${e.message}`;
+                list.appendChild(p);
             }
         }
 
         async function joinChallenge(challengeId) {
             try {
-                const res = await fetch(`${API_URL}/challenges/${challengeId}/join`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telegram_id: user.id })
-                });
-                if (res.ok) {
-                    tg.showAlert("Challenge'ga muvaffaqiyatli qo'shildingiz!");
-                    loadChallenges();
-                } else {
-                    const data = await res.json();
-                    tg.showAlert(`Xato: ${data.error || 'Qo\'shilib bo\'lmadi'}`);
-                }
+                await api(`/challenges/${challengeId}/join`, { method: 'POST' });
+                tg.showAlert("Challenge'ga muvaffaqiyatli qo'shildingiz!");
+                loadChallenges();
             } catch (e) {
-                tg.showAlert(`Network xatosi: ${e.message}`);
+                tg.showAlert(`Xato: ${e.message}`);
             }
         }
 
         document.getElementById('modal-submit').onclick = async () => {
-            const value = document.getElementById('submission-value').value;
-            if (!value) return;
-
+            const value = parseFloat(document.getElementById('submission-value').value);
+            if (!Number.isFinite(value) || value <= 0) {
+                tg.showAlert('Iltimos, musbat son kiriting.');
+                return;
+            }
             try {
-                const res = await fetch(`${API_URL}/challenges/${activeChallengeId}/submit`, {
+                const data = await api(`/challenges/${activeChallengeId}/submit`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        telegram_id: user.id,
-                        value: parseFloat(value)
-                    })
+                    body: JSON.stringify({ value })
                 });
-
-                const data = await res.json();
-                if (res.ok) {
-                    tg.showAlert(`Muvaffaqiyatli! Streak: ${data.current_streak} kun`);
-                    closeModal();
-                } else {
-                    tg.showAlert(`Xato: ${data.error}`);
-                }
+                tg.showAlert(`Muvaffaqiyatli! Streak: ${data.current_streak} kun`);
+                closeModal();
             } catch (e) {
-                tg.showAlert(`Xatolik: ${e.message}`);
+                tg.showAlert(`Xato: ${e.message}`);
             }
         };
 
-        registerUser().then(loadChallenges);
+        if (!initData || !user) {
+            document.getElementById('user-name').innerText = 'Qadam Club';
+            document.getElementById('challenge-list').innerHTML =
+                '<p style="text-align:center;">Bu sahifani Telegram ichidagi bot orqali oching.<br>Please open this Mini App from the Telegram bot.</p>';
+        } else {
+            document.getElementById('user-name').innerText = `Salom, ${user.first_name}!`;
+            api('/auth/register', { method: 'POST' })
+                .catch(e => console.error('Register error:', e))
+                .then(loadChallenges);
+        }
     </script>
 </body>
 

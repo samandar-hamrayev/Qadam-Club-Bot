@@ -56,7 +56,8 @@
 </head>
 
 <body>
-    <h1>Qadam Club Admin Panel</h1>
+    <h1>Qadam Club Admin Panel <button id="logout" style="float:right; background:#6b7280;">Log out</button></h1>
+    <p id="status" style="color:#b91c1c;"></p>
 
     <div class="grid">
         <div class="section">
@@ -83,16 +84,46 @@
 
     <script>
         const API_URL = window.location.origin + "/api";
-        let ADMIN_ID = localStorage.getItem('admin_id');
+        // The admin API token is kept only for this browser tab (sessionStorage)
+        // and sent as a Bearer token; it is never put into URLs.
+        const TOKEN_KEY = 'qadam_admin_token';
 
-        if (!ADMIN_ID) {
-            ADMIN_ID = prompt("Admin Telegram ID'ingizni kiriting:");
-            if (ADMIN_ID) localStorage.setItem('admin_id', ADMIN_ID);
+        function getToken() {
+            let token = sessionStorage.getItem(TOKEN_KEY);
+            if (!token) {
+                token = prompt("ADMIN_API_TOKEN:");
+                if (token) sessionStorage.setItem(TOKEN_KEY, token.trim());
+            }
+            return sessionStorage.getItem(TOKEN_KEY);
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[ch]);
+        }
+
+        async function api(path, options = {}) {
+            const res = await fetch(`${API_URL}${path}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getToken()}`
+                }
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) { /* empty body */ }
+            if (res.status === 401) sessionStorage.removeItem(TOKEN_KEY);
+            if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+            return data;
+        }
+
+        function showError(e) {
+            document.getElementById('status').textContent = e ? `Error: ${e.message}` : '';
         }
 
         async function createChallenge() {
             const data = {
-                admin_id: ADMIN_ID,
                 title: document.getElementById('c-title').value,
                 description: document.getElementById('c-desc').value,
                 code: document.getElementById('c-code').value,
@@ -100,36 +131,77 @@
                 time_window_start: document.getElementById('c-start').value,
                 time_window_end: document.getElementById('c-end').value
             };
-            const res = await fetch(`${API_URL}/admin/challenges`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            if (res.ok) alert("Created!");
-            loadData();
+            try {
+                await api('/admin/challenges', { method: 'POST', body: JSON.stringify(data) });
+                showError(null);
+                alert("Created!");
+                loadData();
+            } catch (e) {
+                showError(e);
+            }
+        }
+
+        async function setBanned(userId, banned) {
+            try {
+                await api(`/admin/users/${userId}/${banned ? 'ban' : 'unban'}`, { method: 'POST' });
+                loadData();
+            } catch (e) {
+                showError(e);
+            }
+        }
+
+        async function setActive(challengeId, active) {
+            try {
+                await api(`/admin/challenges/${challengeId}`, {
+                    method: 'PATCH', body: JSON.stringify({ is_active: active })
+                });
+                loadData();
+            } catch (e) {
+                showError(e);
+            }
         }
 
         async function loadData() {
-            // Load challenges
-            const cRes = await fetch(`${API_URL}/challenges/`);
-            const challenges = await cRes.json();
-            document.getElementById('challenges-list').innerHTML = `
-                <table>
-                    <tr><th>Title</th><th>Code</th><th>Unit</th></tr>
-                    ${challenges.map(c => `<tr><td>${c.title}</td><td>${c.code}</td><td>${c.target_unit}</td></tr>`).join('')}
-                </table>
-            `;
+            try {
+                const challenges = await api('/admin/challenges');
+                document.getElementById('challenges-list').innerHTML = `
+                    <table>
+                        <tr><th>Title</th><th>Code</th><th>Unit</th><th>Window</th><th>Status</th></tr>
+                        ${challenges.map(c => `<tr>
+                            <td>${escapeHtml(c.title)}</td><td>${escapeHtml(c.code)}</td>
+                            <td>${escapeHtml(c.target_unit)}</td>
+                            <td>${c.time_window_start ? escapeHtml(c.time_window_start + '-' + c.time_window_end) : 'all day'}</td>
+                            <td><button data-challenge="${c.id}" data-active="${!c.is_active}">${c.is_active ? 'Deactivate' : 'Activate'}</button></td>
+                        </tr>`).join('')}
+                    </table>
+                `;
 
-            // Load users
-            const uRes = await fetch(`${API_URL}/admin/users?admin_id=${ADMIN_ID}`);
-            const users = await uRes.json();
-            document.getElementById('users-list').innerHTML = `
-                <table>
-                    <tr><th>Name</th><th>Username</th><th>Status</th></tr>
-                    ${users.map(u => `<tr><td>${u.full_name}</td><td>${u.username}</td><td>${u.is_banned ? 'Banned' : 'Active'}</td></tr>`).join('')}
-                </table>
-            `;
+                const users = await api('/admin/users');
+                document.getElementById('users-list').innerHTML = `
+                    <table>
+                        <tr><th>Name</th><th>Username</th><th>Status</th><th></th></tr>
+                        ${users.map(u => `<tr>
+                            <td>${escapeHtml(u.full_name)}</td><td>${escapeHtml(u.username)}</td>
+                            <td>${u.is_banned ? 'Banned' : 'Active'}</td>
+                            <td><button data-user="${u.id}" data-ban="${!u.is_banned}">${u.is_banned ? 'Unban' : 'Ban'}</button></td>
+                        </tr>`).join('')}
+                    </table>
+                `;
+                showError(null);
+            } catch (e) {
+                showError(e);
+            }
         }
+
+        document.addEventListener('click', (event) => {
+            const el = event.target;
+            if (el.dataset.user) setBanned(el.dataset.user, el.dataset.ban === 'true');
+            if (el.dataset.challenge) setActive(el.dataset.challenge, el.dataset.active === 'true');
+        });
+        document.getElementById('logout').addEventListener('click', () => {
+            sessionStorage.removeItem(TOKEN_KEY);
+            location.reload();
+        });
 
         loadData();
     </script>
