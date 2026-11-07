@@ -1,11 +1,29 @@
+# Secrets
 .env
-*.db
-*.pyc
+.env.*
+!.env.example
+
+# Python
 __pycache__/
-*.log
+*.py[cod]
+*.egg-info/
+.venv/
 venv/
 env/
-.venv/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local databases & logs
+*.db
 *.sqlite
 *.sqlite3
+*.log
+
+# Local notes
 dev-tz.md
+.DS_Store
