@@ -1,0 +1,51 @@
+[project]
+name = "qadam-club-bot"
+version = "1.0.0"
+description = "Telegram habit-tracking bot and Mini App with streaks, time-gated submissions and leaderboards."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Samandar Hamrayev" }]
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "S",   # flake8-bandit (security)
+    "DTZ", # flake8-datetimez (no naive datetimes)
+    "RUF", # ruff-specific
+]
+ignore = [
+    "RUF001", # ambiguous unicode in user-facing (Uzbek) strings is intentional
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "DTZ001"]
+"bot/scheduler.py" = ["S108"] # heartbeat file inside the container's private /tmp
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend", "bot", "config", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = ["error::DeprecationWarning:backend.*", "error::DeprecationWarning:bot.*"]
+
+[tool.coverage.run]
+source = ["backend", "bot", "config"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = ["if __name__ == .__main__.:", "pragma: no cover"]
