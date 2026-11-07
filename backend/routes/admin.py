@@ -1,200 +1,168 @@
-from flask import Blueprint, request, jsonify
-from ..database import SessionLocal
-from ..models import User, Challenge, AdminUser, Submission
-from sqlalchemy import select, and_
+from flask import Blueprint, jsonify, request
 
-admin_bp = Blueprint('admin', __name__)
+from .. import services
+from ..auth import require_admin
+from ..database import session_scope
+from ._helpers import int_arg
 
-def check_admin(telegram_id):
-    db = SessionLocal()
-    try:
-        admin = db.query(AdminUser).filter(AdminUser.telegram_id == telegram_id).first()
-        return admin is not None
-    finally:
-        db.close()
+admin_bp = Blueprint("admin", __name__)
 
-@admin_bp.route('/challenges', methods=['POST'])
+
+@admin_bp.route("/challenges", methods=["GET"])
+@require_admin
+def list_challenges():
+    """
+    List all challenges, including inactive ones.
+    ---
+    tags: [Admin]
+    security: [{AdminToken: []}, {TelegramInitData: []}]
+    responses:
+      200:
+        description: All challenges
+      401:
+        description: Missing or invalid credentials
+    """
+    with session_scope() as db:
+        return jsonify(services.list_all_challenges(db))
+
+
+@admin_bp.route("/challenges", methods=["POST"])
+@require_admin
 def create_challenge():
     """
-    Yangi challenge yaratish
+    Create a challenge.
     ---
-    tags:
-      - Admin
+    tags: [Admin]
+    security: [{AdminToken: []}, {TelegramInitData: []}]
     parameters:
       - name: body
         in: body
         required: true
         schema:
           type: object
+          required: [title, code]
           properties:
-            admin_id:
-              type: integer
-            title:
-              type: string
-            description:
-              type: string
-            code:
-              type: string
-            target_unit:
-              type: string
-            time_window_start:
-              type: string
-            time_window_end:
-              type: string
+            title: {type: string, example: Book Challenge}
+            description: {type: string}
+            code: {type: string, example: book, description: "a-z, 0-9, _ (also a bot command)"}
+            target_unit: {type: string, example: pages}
+            time_window_start: {type: string, example: "21:00"}
+            time_window_end: {type: string, example: "23:59"}
+            is_active: {type: boolean}
     responses:
-      200:
-        description: Challenge yaratildi
-      403:
-        description: Ruxsat yo'q
+      201:
+        description: Created
+      400:
+        description: Validation error
+      401:
+        description: Missing or invalid credentials
+      409:
+        description: Code already exists
     """
-    data = request.json
-    admin_id = data.get('admin_id')
-    if not check_admin(admin_id):
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    db = SessionLocal()
-    try:
-        challenge = Challenge(
-            title=data['title'],
-            description=data.get('description'),
-            code=data['code'],
-            target_unit=data.get('target_unit', 'units'),
-            time_window_start=data.get('time_window_start'),
-            time_window_end=data.get('time_window_end')
-        )
-        db.add(challenge)
-        db.commit()
-        return jsonify({"status": "success", "id": challenge.id})
-    except Exception as e:
-        db.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        db.close()
+    with session_scope() as db:
+        challenge = services.create_challenge(db, request.get_json(silent=True))
+        payload = services.challenge_to_dict(challenge)
+    return jsonify({"status": "success", "id": payload["id"], "challenge": payload}), 201
 
-@admin_bp.route('/challenges/<int:id>', methods=['PATCH'])
-def update_challenge(id):
+
+@admin_bp.route("/challenges/<int:challenge_id>", methods=["PATCH"])
+@require_admin
+def update_challenge(challenge_id: int):
     """
-    Challenge ma'lumotlarini yangilash
+    Update whitelisted challenge fields.
     ---
-    tags:
-      - Admin
+    tags: [Admin]
+    security: [{AdminToken: []}, {TelegramInitData: []}]
     parameters:
-      - name: id
-        in: path
-        type: integer
-        required: true
+      - {name: challenge_id, in: path, type: integer, required: true}
       - name: body
         in: body
         required: true
         schema:
           type: object
           properties:
-            admin_id:
-              type: integer
-            title:
-              type: string
-            description:
-              type: string
+            title: {type: string}
+            description: {type: string}
+            code: {type: string}
+            target_unit: {type: string}
+            time_window_start: {type: string}
+            time_window_end: {type: string}
+            is_active: {type: boolean}
     responses:
       200:
-        description: Yangilandi
-      403:
-        description: Ruxsat yo'q
+        description: Updated
+      400:
+        description: Validation error or unknown field
+      404:
+        description: Challenge not found
     """
-    data = request.json
-    admin_id = data.get('admin_id')
-    if not check_admin(admin_id):
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    db = SessionLocal()
-    try:
-        challenge = db.query(Challenge).get(id)
-        if not challenge:
-            return jsonify({"error": "Challenge not found"}), 404
-        
-        for key, value in data.items():
-            if hasattr(challenge, key) and key != 'id':
-                setattr(challenge, key, value)
-        
-        db.commit()
-        return jsonify({"status": "success"})
-    finally:
-        db.close()
+    with session_scope() as db:
+        challenge = services.update_challenge(db, challenge_id, request.get_json(silent=True))
+        payload = services.challenge_to_dict(challenge)
+    return jsonify({"status": "success", "challenge": payload})
 
-@admin_bp.route('/users', methods=['GET'])
+
+@admin_bp.route("/users", methods=["GET"])
+@require_admin
 def list_users():
     """
-    Barcha foydalanuvchilar ro'yxatini olish
+    List users (paginated).
     ---
-    tags:
-      - Admin
+    tags: [Admin]
+    security: [{AdminToken: []}, {TelegramInitData: []}]
     parameters:
-      - name: admin_id
-        in: query
-        type: integer
-        required: true
+      - {name: limit, in: query, type: integer, default: 100}
+      - {name: offset, in: query, type: integer, default: 0}
     responses:
       200:
-        description: Foydalanuvchilar ro'yxati
-      403:
-        description: Ruxsat yo'q
+        description: Users
     """
-    admin_id = request.args.get('admin_id', type=int)
-    if not check_admin(admin_id):
-        return jsonify({"error": "Unauthorized"}), 403
-        
-    db = SessionLocal()
-    try:
-        users = db.query(User).all()
-        return jsonify([{
-            "id": u.id,
-            "telegram_id": u.telegram_id,
-            "full_name": u.full_name,
-            "username": u.username,
-            "is_active": u.is_active,
-            "is_banned": u.is_banned
-        } for u in users])
-    finally:
-        db.close()
+    limit = min(max(int_arg("limit", required=False, default=100), 1), 500)
+    offset = max(int_arg("offset", required=False, default=0), 0)
+    with session_scope() as db:
+        return jsonify(services.list_users(db, limit=limit, offset=offset))
 
-@admin_bp.route('/users/<int:id>/ban', methods=['POST'])
-def ban_user(id):
+
+def _set_banned(user_id: int, banned: bool):
+    with session_scope() as db:
+        user = services.set_banned(db, user_id, banned)
+        payload = services.user_to_dict(user)
+    return jsonify({"status": "success", "user": payload})
+
+
+@admin_bp.route("/users/<int:user_id>/ban", methods=["POST"])
+@require_admin
+def ban_user(user_id: int):
     """
-    Foydalanuvchini bloklash
+    Ban a user (blocks joining and submitting, hides them from leaderboards).
     ---
-    tags:
-      - Admin
+    tags: [Admin]
+    security: [{AdminToken: []}, {TelegramInitData: []}]
     parameters:
-      - name: id
-        in: path
-        type: integer
-        required: true
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          properties:
-            admin_id:
-              type: integer
+      - {name: user_id, in: path, type: integer, required: true}
     responses:
       200:
-        description: Foydalanuvchi bloklandi
-      403:
-        description: Ruxsat yo'q
+        description: Banned
+      404:
+        description: User not found
     """
-    data = request.json
-    admin_id = data.get('admin_id')
-    if not check_admin(admin_id):
-        return jsonify({"error": "Unauthorized"}), 403
-        
-    db = SessionLocal()
-    try:
-        user = db.query(User).get(id)
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-        user.is_banned = True
-        db.commit()
-        return jsonify({"status": "success"})
-    finally:
-        db.close()
+    return _set_banned(user_id, True)
+
+
+@admin_bp.route("/users/<int:user_id>/unban", methods=["POST"])
+@require_admin
+def unban_user(user_id: int):
+    """
+    Lift a ban.
+    ---
+    tags: [Admin]
+    security: [{AdminToken: []}, {TelegramInitData: []}]
+    parameters:
+      - {name: user_id, in: path, type: integer, required: true}
+    responses:
+      200:
+        description: Unbanned
+      404:
+        description: User not found
+    """
+    return _set_banned(user_id, False)

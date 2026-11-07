@@ -1,106 +1,29 @@
-from flask import Blueprint, request, jsonify
-from ..database import SessionLocal
-from ..models import User, AdminUser
-from sqlalchemy import select
+from flask import Blueprint, g, jsonify
 
-auth_bp = Blueprint('auth', __name__)
+from .. import services
+from ..auth import require_tma_user
+from ..database import session_scope
 
-@auth_bp.route('/register', methods=['POST'])
+auth_bp = Blueprint("auth", __name__)
+
+
+@auth_bp.route("/register", methods=["POST"])
+@require_tma_user
 def register():
     """
-    Foydalanuvchini ro'yxatdan o'tkazish yoki ma'lumotlarini yangilash
+    Register the Mini App user or refresh their profile.
+    The identity comes exclusively from the validated Telegram initData.
     ---
-    tags:
-      - Auth
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - telegram_id
-          properties:
-            telegram_id:
-              type: integer
-              description: Foydalanuvchining Telegram ID raqami
-            full_name:
-              type: string
-              description: Foydalanuvchining to'liq ismi
-            username:
-              type: string
-              description: Foydalanuvchining Telegram username'i
+    tags: [Auth]
+    security: [{TelegramInitData: []}]
     responses:
       200:
-        description: Muvaffaqiyatli ro'yxatdan o'tildi
-        schema:
-          properties:
-            status:
-              type: string
-              example: success
-            user:
-              type: object
-              properties:
-                id:
-                  type: integer
-                telegram_id:
-                  type: integer
-                full_name:
-                  type: string
-                username:
-                  type: string
-                is_active:
-                  type: boolean
-                is_banned:
-                  type: boolean
-                is_admin:
-                  type: boolean
-      400:
-        description: Ma'lumotlar to'liq emas
-      500:
-        description: Server xatosi
+        description: Registered user
+      401:
+        description: Missing, forged or expired initData
     """
-    data = request.json
-    if not data or 'telegram_id' not in data:
-        return jsonify({"error": "Missing telegram_id"}), 400
-    
-    telegram_id = data['telegram_id']
-    full_name = data.get('full_name', 'Unknown')
-    username = data.get('username')
-    
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
-        if not user:
-            user = User(
-                telegram_id=telegram_id,
-                full_name=full_name,
-                username=username
-            )
-            db.add(user)
-        else:
-            user.full_name = full_name
-            user.username = username
-        
-        db.commit()
-        
-        # Check if admin
-        is_admin = db.query(AdminUser).filter(AdminUser.telegram_id == telegram_id).first() is not None
-        
-        return jsonify({
-            "status": "success",
-            "user": {
-                "id": user.id,
-                "telegram_id": user.telegram_id,
-                "full_name": user.full_name,
-                "username": user.username,
-                "is_active": user.is_active,
-                "is_banned": user.is_banned,
-                "is_admin": is_admin
-            }
-        })
-    except Exception as e:
-        db.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        db.close()
+    tg_user = g.init_data.user
+    with session_scope() as db:
+        user = services.upsert_user(db, tg_user.id, tg_user.full_name, tg_user.username)
+        payload = services.user_to_dict(user, is_admin=services.is_admin(db, tg_user.id))
+    return jsonify({"status": "success", "user": payload})
