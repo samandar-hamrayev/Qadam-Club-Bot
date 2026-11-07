@@ -1,84 +1,87 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime, timedelta
-from telegram.ext import ContextTypes
-import requests
-from config import Config
-from backend.database import SessionLocal
-from backend.models import User, Submission, Challenge, UserChallenge, WeeklyResult, MonthlyResult
-from sqlalchemy import func, and_
+"""Scheduled jobs, run by PTB's JobQueue (APScheduler under the hood).
 
-API_BASE_URL = Config.API_URL
+All schedules use the configured club timezone, not the server's local time.
+"""
 
-async def send_daily_reminders(context: ContextTypes.DEFAULT_TYPE):
-    db = SessionLocal()
+from __future__ import annotations
+
+import logging
+from datetime import datetime, time
+from pathlib import Path
+
+from telegram.error import Forbidden, TelegramError
+from telegram.ext import Application, ContextTypes
+
+from backend import services
+from backend.domain.window import parse_hhmm
+from config import Settings
+
+from .handlers import run_db
+
+logger = logging.getLogger(__name__)
+
+HEARTBEAT_FILE = Path("/tmp/qadam-bot.heartbeat")
+MONDAY = 1  # PTB >= 20 numbers days 0-6 as Sunday-Saturday
+
+
+def _settings(context: ContextTypes.DEFAULT_TYPE) -> Settings:
+    return context.application.bot_data["settings"]
+
+
+async def _safe_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -> bool:
     try:
-        # Get users who haven't submitted today for active challenges
-        today = datetime.now().date()
-        active_challenges = db.query(Challenge).filter(Challenge.is_active == True).all()
-        
-        for challenge in active_challenges:
-            # Users joined this challenge
-            users_in_challenge = db.query(User).join(UserChallenge).filter(
-                and_(UserChallenge.challenge_id == challenge.id, UserChallenge.is_joined == True)
-            ).all()
-            
-            for user in users_in_challenge:
-                # Check submission
-                sub = db.query(Submission).filter(
-                    and_(Submission.user_id == user.id, Submission.challenge_id == challenge.id, Submission.date == today)
-                ).first()
-                
-                if not sub:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=user.telegram_id,
-                            text=f"🔔 Eslatma: Bugun '{challenge.title}' challenge uchun natija topshirishni unutdingiz!"
-                        )
-                    except:
-                        pass
-    finally:
-        db.close()
+        await context.bot.send_message(chat_id=chat_id, text=text)
+        return True
+    except Forbidden:
+        logger.info("user %s blocked the bot; skipping", chat_id)
+    except TelegramError:
+        logger.exception("failed to send message to %s", chat_id)
+    return False
 
-async def calculate_weekly_winners():
-    db = SessionLocal()
-    try:
-        now = datetime.now()
-        last_week_start = (now - timedelta(days=now.weekday() + 7)).date()
-        last_week_end = (now - timedelta(days=now.weekday() + 1)).date()
-        
-        challenges = db.query(Challenge).all()
-        for challenge in challenges:
-            results = db.query(
-                Submission.user_id,
-                func.sum(Submission.value).label('total')
-            ).filter(
-                and_(
-                    Submission.challenge_id == challenge.id,
-                    Submission.date >= last_week_start,
-                    Submission.date <= last_week_end
-                )
-            ).group_by(Submission.user_id).order_by(func.sum(Submission.value).desc()).all()
-            
-            for i, res in enumerate(results):
-                wr = WeeklyResult(
-                    user_id=res.user_id,
-                    challenge_id=challenge.id,
-                    week_start=last_week_start,
-                    total_value=float(res.total),
-                    rank=i+1
-                )
-                db.add(wr)
-        db.commit()
-    finally:
-        db.close()
 
-def setup_scheduler(application):
-    scheduler = AsyncIOScheduler()
-    
-    # Daily reminders at 21:00
-    scheduler.add_job(send_daily_reminders, 'cron', hour=21, minute=0, args=[application.job_queue])
-    
-    # Weekly results every Monday at 00:01
-    scheduler.add_job(calculate_weekly_winners, 'cron', day_of_week='mon', hour=0, minute=1)
-    
-    scheduler.start()
+async def send_daily_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
+    now_local = datetime.now(_settings(context).tz)
+    reminders = await run_db(services.pending_reminders, now_local)
+    sent = 0
+    for reminder in reminders:
+        sent += await _safe_send(
+            context,
+            reminder.telegram_id,
+            f"🔔 Eslatma: bugun '{reminder.challenge_title}' challenge uchun "
+            "natija topshirishni unutmang!",
+        )
+    logger.info("daily reminders: %d/%d delivered", sent, len(reminders))
+
+
+async def announce_weekly_winners(context: ContextTypes.DEFAULT_TYPE) -> None:
+    today = datetime.now(_settings(context).tz).date()
+    winners = await run_db(services.record_weekly_results, today)
+    for w in winners:
+        await _safe_send(
+            context,
+            w.telegram_id,
+            f"🏆 Tabriklaymiz, {w.full_name}! Siz {w.week_start:%d.%m.%Y} haftasida "
+            f"'{w.challenge_title}' challenge g'olibisiz: {w.total:g} {w.target_unit}.",
+        )
+    logger.info("weekly results recorded; %d winner(s) notified", len(winners))
+
+
+async def heartbeat(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Touch a file so the container healthcheck can tell the loop is alive."""
+    HEARTBEAT_FILE.touch()
+
+
+def setup_jobs(application: Application, settings: Settings) -> None:
+    job_queue = application.job_queue
+    if job_queue is None:  # pragma: no cover - requires the [job-queue] extra
+        raise RuntimeError("python-telegram-bot[job-queue] is required")
+    tz = settings.tz
+    reminder_at = parse_hhmm(settings.reminder_time).replace(tzinfo=tz)
+    job_queue.run_daily(send_daily_reminders, time=reminder_at, name="daily-reminders")
+    job_queue.run_daily(
+        announce_weekly_winners,
+        time=time(0, 5, tzinfo=tz),
+        days=(MONDAY,),
+        name="weekly-winners",
+    )
+    job_queue.run_repeating(heartbeat, interval=30, first=0, name="heartbeat")
