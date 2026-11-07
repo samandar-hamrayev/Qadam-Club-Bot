@@ -1,20 +1,66 @@
+# Full stack: PostgreSQL + Flask API/Mini App (gunicorn) + Telegram bot.
+#   cp .env.example .env   # fill BOT_TOKEN, ADMIN_API_TOKEN, ...
+#   docker compose up --build
+# The bot exits (and is restarted) until a valid BOT_TOKEN is configured;
+# the web service runs without it, but Mini App endpoints answer 503.
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg2://qadam:${POSTGRES_PASSWORD:-qadam-dev-password}@db:5432/qadam
+
 services:
-  backend:
-    build: .
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: qadam
+      POSTGRES_USER: qadam
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qadam-dev-password}
     volumes:
-      - .:/app
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qadam -d qadam"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: .
+    image: qadam-club-bot:local
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      <<: *app-env
     ports:
-      - "5001:5000"
-    command: python -m backend.app
+      - "${WEB_PORT:-18400}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
   bot:
-    build: .
-    volumes:
-      - .:/app
+    image: qadam-club-bot:local
+    command: ["python", "-m", "bot.bot"]
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      <<: *app-env
     depends_on:
-      - backend
-    command: python -m bot.bot
+      web:
+        condition: service_healthy
+    healthcheck:
+      # The bot touches this file every 30 s from its JobQueue.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os, sys, time; p='/tmp/qadam-bot.heartbeat'; sys.exit(0 if os.path.exists(p) and time.time() - os.path.getmtime(p) < 120 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  pgdata:
